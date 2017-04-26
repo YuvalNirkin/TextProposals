@@ -1,34 +1,71 @@
 cmake_minimum_required(VERSION 2.8)
 project(TextProposals)
 
-# Select a default build configuration if none was chosen
-IF(NOT CMAKE_BUILD_TYPE)
-  SET(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build, options are: None (CMAKE_CXX_FLAGS or CMAKE_C_FLAGS used) Debug Release RelWithDebInfo MinSizeRel." FORCE)
-ENDIF()
+# Set version
+set(TEXT_PROPOSALS_MAJOR_VERSION 0)
+set(TEXT_PROPOSALS_MINOR_VERSION 9)
+set(TEXT_PROPOSALS_PATCH_VERSION 0)
+set(TEXT_PROPOSALS_VERSION ${TEXT_PROPOSALS_MAJOR_VERSION}.${TEXT_PROPOSALS_MINOR_VERSION}.${TEXT_PROPOSALS_PATCH_VERSION})
 
-find_package(OpenCV REQUIRED)
+# Global configurations
+# ===================================================
+if(WIN32)
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DNOMINMAX -D_USE_MATH_DEFINES")
+	set(DEF_INSTALL_CMAKE_DIR cmake)
+else()
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -fPIC")
+	set(DEF_INSTALL_CMAKE_DIR lib/cmake/${PROJECT_NAME})
+endif()
+set(INSTALL_CMAKE_DIR ${DEF_INSTALL_CMAKE_DIR} CACHE PATH
+	"Installation directory for CMake files")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake")
+set(CMAKE_DEBUG_POSTFIX "_d" CACHE STRING
+	"Add a custom \"postfix\" to static and shared libraries when in Debug build")
+set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
-include_directories ("/usr/src/caffe/include/")
-include_directories ("/usr/src/caffe/.build_release/src/")
-include_directories ("/usr/local/cuda-7.5/include/")
+# Optional 3rd party components
+# ===================================================
+option(WITH_BOOST_STATIC "Boost static libraries" ON)
 
-link_directories ("/usr/src/caffe/build/lib/")
-link_directories ("/usr/local/cuda-7.5/lib/")
+# Build components
+# ===================================================
 
-set (EXTRA_LIBS ${EXTRA_LIBS} libcaffe.so -lprotobuf -lglog -lboost_system)
+# Find dependencies
+# ===================================================
 
+# Boost
+set(Boost_USE_STATIC_LIBS ${WITH_BOOST_STATIC})
+set(BOOST_ALL_DYN_LINK NOT ${WITH_BOOST_STATIC})
+if(WIN32)
+	if(${WITH_BOOST_STATIC})
+		add_definitions(-DBOOST_ALL_NO_LIB)
+	else()
+		add_definitions(-DBOOST_ALL_DYN_LINK)
+	endif()
+endif()
+find_package(Boost REQUIRED filesystem program_options regex timer)
 
-ADD_EXECUTABLE(img2hierarchy fast_clustering.cpp main.cpp agglomerative_clustering.cpp region.cpp min_bounding_box.cpp)
-ADD_EXECUTABLE(img2hierarchy_cnn fast_clustering.cpp main_cnn.cpp agglomerative_clustering.cpp stopping_rule.cpp region.cpp min_bounding_box.cpp)
-ADD_EXECUTABLE(eval_IC03 fast_clustering.cpp eval_IC03.cpp agglomerative_clustering.cpp stopping_rule.cpp region.cpp min_bounding_box.cpp)
-ADD_EXECUTABLE(eval_IC15 fast_clustering.cpp eval_IC15.cpp agglomerative_clustering.cpp stopping_rule.cpp region.cpp min_bounding_box.cpp)
-ADD_EXECUTABLE(eval_SVT fast_clustering.cpp eval_SVT.cpp agglomerative_clustering.cpp stopping_rule.cpp region.cpp min_bounding_box.cpp)
+# OpenCV
+find_package(OpenCV REQUIRED highgui imgproc imgcodecs calib3d photo)
 
-FIND_PACKAGE(OpenCV REQUIRED)
-IF(OpenCV_FOUND)
-  TARGET_LINK_LIBRARIES(img2hierarchy ${OpenCV_LIBS})
-  TARGET_LINK_LIBRARIES(img2hierarchy_cnn ${OpenCV_LIBS} ${EXTRA_LIBS})
-  TARGET_LINK_LIBRARIES(eval_IC03 ${OpenCV_LIBS} ${EXTRA_LIBS} tinyxml)
-  TARGET_LINK_LIBRARIES(eval_IC15 ${OpenCV_LIBS} ${EXTRA_LIBS} tinyxml)
-  TARGET_LINK_LIBRARIES(eval_SVT ${OpenCV_LIBS} ${EXTRA_LIBS} tinyxml)
-ENDIF()
+# Caffe
+find_package(Caffe REQUIRED)
+
+# glog
+find_package(glog REQUIRED)
+
+# protobuf
+find_package(protobuf REQUIRED)
+
+# Add sub-directories
+# ===================================================
+add_subdirectory(text_proposal)
+add_subdirectory(img2hierarchy)
+add_subdirectory(img2hierarchy_cnn)
+
+# Export configuration
+# ===================================================
+
+# Install data
+install(FILES trained_boost_groups.xml lex.txt
+		DESTINATION bin)
